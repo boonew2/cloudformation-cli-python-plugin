@@ -132,3 +132,9 @@ class BaseResourceHandlerRequest:
     previousResourceState: Optional[BaseModel]
     logicalResourceIdentifier: Optional[str]
     nextToken: Optional[str]
+
+@dataclass
+class TagData:
+    # pylint: disable=invalid-name
+    systemTags: Optional[Mapping[str, Any]] = None
+    stackTags: Optional[Mapping[str, Any]] = None

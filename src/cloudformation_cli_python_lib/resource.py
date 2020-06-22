@@ -13,6 +13,7 @@ from .interface import (
     HandlerErrorCode,
     OperationStatus,
     ProgressEvent,
+    TagData
 )
 from .log_delivery import ProviderLogHandler
 from .metrics import MetricsPublisherProxy
@@ -74,6 +75,7 @@ class Resource:
         request: BaseResourceHandlerRequest,
         action: Action,
         callback_context: MutableMapping[str, Any],
+        tag_data: TagData
     ) -> ProgressEvent:
         try:
             handler = self._handlers[action]
@@ -81,7 +83,7 @@ class Resource:
             return ProgressEvent.failed(
                 HandlerErrorCode.InternalFailure, f"No handler for {action}"
             )
-        progress = handler(session, request, callback_context)
+        progress = handler(session, request, callback_context, tag_data)
         is_in_progress = progress.status == OperationStatus.IN_PROGRESS
         is_mutable = action in MUTATING_ACTIONS
         if is_in_progress and not is_mutable:
@@ -95,6 +97,7 @@ class Resource:
         BaseResourceHandlerRequest,
         Action,
         MutableMapping[str, Any],
+        TagData,
     ]:
         try:
             event = TestEvent(**event_data)
@@ -102,13 +105,16 @@ class Resource:
             request: BaseResourceHandlerRequest = UnmodelledRequest(
                 **event.request
             ).to_modelled(self._model_cls)
-
             session = _get_boto_session(creds, event.region)
             action = Action[event.action]
+            tag_data: TagData = TagData(
+                event.request.get('systemTags'),
+                event.request.get('stackTags')
+            ) 
         except Exception as e:  # pylint: disable=broad-except
             LOG.exception("Invalid request")
             raise InternalFailure(f"{e} ({type(e).__name__})") from e
-        return session, request, action, event.callbackContext or {}
+        return session, request, action, event.callbackContext or {}, tag_data
 
     @_ensure_serialize
     def test_entrypoint(
@@ -116,8 +122,8 @@ class Resource:
     ) -> ProgressEvent:
         msg = "Uninitialized"
         try:
-            session, request, action, callback_context = self._parse_test_request(event)
-            return self._invoke_handler(session, request, action, callback_context)
+            session, request, action, callback_context, tag_data = self._parse_test_request(event)
+            return self._invoke_handler(session, request, action, callback_context, tag_data)
         except _HandlerError as e:
             LOG.exception("Handler error")
             return e.to_progress_event()
@@ -169,6 +175,14 @@ class Resource:
             LOG.exception("Invalid request")
             raise InvalidRequest(f"{e} ({type(e).__name__})") from e
 
+    def _cast_tag_data(
+        self, request: HandlerRequest
+    ) -> TagData:
+        return TagData(
+            request.requestData.systemTags or {}, # probably never empty
+            request.requestData.stackTags or {}
+        )
+
     # TODO: refactor to reduce branching and locals
     @_ensure_serialize  # noqa: C901
     def __call__(  # pylint: disable=too-many-locals  # noqa: C901
@@ -190,7 +204,7 @@ class Resource:
             logs_setup = True
 
             request = self._cast_resource_request(event)
-
+            tag_data = self._cast_tag_data(event)
             metrics = MetricsPublisherProxy(event.awsAccountId, event.resourceType)
             metrics.add_metrics_publisher(provider_sess)
 
@@ -199,7 +213,7 @@ class Resource:
             error = None
 
             try:
-                progress = self._invoke_handler(caller_sess, request, action, callback)
+                progress = self._invoke_handler(caller_sess, request, action, callback, tag_data)
             except Exception as e:  # pylint: disable=broad-except
                 error = e
             m_secs = (datetime.utcnow() - start_time).total_seconds() * 1000.0

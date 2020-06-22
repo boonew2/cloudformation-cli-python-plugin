@@ -6,6 +6,7 @@ from {{support_lib_pkg}} import (
     HandlerErrorCode,
     OperationStatus,
     ProgressEvent,
+    TagData,
     Resource,
     SessionProxy,
     exceptions,
@@ -26,6 +27,7 @@ def create_handler(
     session: Optional[SessionProxy],
     request: ResourceHandlerRequest,
     callback_context: MutableMapping[str, Any],
+    tag_data: TagData,
 ) -> ProgressEvent:
     model = request.desiredResourceState
     progress: ProgressEvent = ProgressEvent(
@@ -53,6 +55,7 @@ def update_handler(
     session: Optional[SessionProxy],
     request: ResourceHandlerRequest,
     callback_context: MutableMapping[str, Any],
+    tag_data: TagData,
 ) -> ProgressEvent:
     model = request.desiredResourceState
     progress: ProgressEvent = ProgressEvent(
@@ -68,6 +71,7 @@ def delete_handler(
     session: Optional[SessionProxy],
     request: ResourceHandlerRequest,
     callback_context: MutableMapping[str, Any],
+    tag_data: TagData,
 ) -> ProgressEvent:
     model = request.desiredResourceState
     progress: ProgressEvent = ProgressEvent(

@@ -7,6 +7,7 @@ from .interface import (  # noqa: F401
     HandlerErrorCode,
     OperationStatus,
     ProgressEvent,
+    TagData,
 )
 from .resource import Resource  # noqa: F401
 
